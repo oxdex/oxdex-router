@@ -1,11 +1,9 @@
 import chai, { expect } from 'chai'
 import { solidity, MockProvider, createFixtureLoader, deployContract } from 'ethereum-waffle'
-import { Contract } from 'ethers'
-import { BigNumber, bigNumberify } from 'ethers/utils'
-import { MaxUint256 } from 'ethers/constants'
+import { constants as ethconst, BigNumber, Contract } from 'ethers'
 import IOxDexPair from 'oxdex-contract/build/IOxDexPair.json'
 
-import { v2Fixture } from './shared/fixtures'
+import { Fixture } from './shared/fixtures'
 import { expandTo18Decimals, getApprovalDigest, MINIMUM_LIQUIDITY } from './shared/utilities'
 
 import DeflatingERC20 from '../build/DeflatingERC20.json'
@@ -14,128 +12,138 @@ import { ecsign } from 'ethereumjs-util'
 chai.use(solidity)
 
 const overrides = {
-  gasLimit: 9999999
+  gasLimit: 9999999,
 }
 
 describe('OxDexRouter', () => {
   const provider = new MockProvider({
-    hardfork: 'istanbul',
-    mnemonic: 'horn horn horn horn horn horn horn horn horn horn horn horn',
-    gasLimit: 9999999
+    ganacheOptions: {
+      hardfork: 'istanbul',
+      mnemonic: 'horn horn horn horn horn horn horn horn horn horn horn horn',
+      gasLimit: 9999999,
+    },
   })
+
   const [wallet] = provider.getWallets()
-  const loadFixture = createFixtureLoader(provider, [wallet])
+  const loadFixture = createFixtureLoader([wallet], provider)
 
   let token0: Contract
   let token1: Contract
   let router: Contract
-  beforeEach(async function() {
-    const fixture = await loadFixture(v2Fixture)
+  beforeEach(async function () {
+    const fixture = await loadFixture(Fixture)
     token0 = fixture.token0
     token1 = fixture.token1
     router = fixture.router
   })
 
   it('quote', async () => {
-    expect(await router.quote(bigNumberify(1), bigNumberify(100), bigNumberify(200))).to.eq(bigNumberify(2))
-    expect(await router.quote(bigNumberify(2), bigNumberify(200), bigNumberify(100))).to.eq(bigNumberify(1))
-    await expect(router.quote(bigNumberify(0), bigNumberify(100), bigNumberify(200))).to.be.revertedWith(
+    expect(await router.quote(BigNumber.from(1), BigNumber.from(100), BigNumber.from(200))).to.eq(BigNumber.from(2))
+    expect(await router.quote(BigNumber.from(2), BigNumber.from(200), BigNumber.from(100))).to.eq(BigNumber.from(1))
+    await expect(router.quote(BigNumber.from(0), BigNumber.from(100), BigNumber.from(200))).to.be.revertedWith(
       'OxDexLibrary: INSUFFICIENT_AMOUNT'
     )
-    await expect(router.quote(bigNumberify(1), bigNumberify(0), bigNumberify(200))).to.be.revertedWith(
+    await expect(router.quote(BigNumber.from(1), BigNumber.from(0), BigNumber.from(200))).to.be.revertedWith(
       'OxDexLibrary: INSUFFICIENT_LIQUIDITY'
     )
-    await expect(router.quote(bigNumberify(1), bigNumberify(100), bigNumberify(0))).to.be.revertedWith(
+    await expect(router.quote(BigNumber.from(1), BigNumber.from(100), BigNumber.from(0))).to.be.revertedWith(
       'OxDexLibrary: INSUFFICIENT_LIQUIDITY'
     )
   })
 
   it('getAmountOut', async () => {
-    expect(await router.getAmountOut(bigNumberify(2), bigNumberify(100), bigNumberify(100))).to.eq(bigNumberify(1))
-    await expect(router.getAmountOut(bigNumberify(0), bigNumberify(100), bigNumberify(100))).to.be.revertedWith(
+    expect(await router.getAmountOut(BigNumber.from(2), BigNumber.from(100), BigNumber.from(100))).to.eq(
+      BigNumber.from(1)
+    )
+    await expect(router.getAmountOut(BigNumber.from(0), BigNumber.from(100), BigNumber.from(100))).to.be.revertedWith(
       'OxDexLibrary: INSUFFICIENT_INPUT_AMOUNT'
     )
-    await expect(router.getAmountOut(bigNumberify(2), bigNumberify(0), bigNumberify(100))).to.be.revertedWith(
+    await expect(router.getAmountOut(BigNumber.from(2), BigNumber.from(0), BigNumber.from(100))).to.be.revertedWith(
       'OxDexLibrary: INSUFFICIENT_LIQUIDITY'
     )
-    await expect(router.getAmountOut(bigNumberify(2), bigNumberify(100), bigNumberify(0))).to.be.revertedWith(
+    await expect(router.getAmountOut(BigNumber.from(2), BigNumber.from(100), BigNumber.from(0))).to.be.revertedWith(
       'OxDexLibrary: INSUFFICIENT_LIQUIDITY'
     )
   })
 
   it('getAmountIn', async () => {
-    expect(await router.getAmountIn(bigNumberify(1), bigNumberify(100), bigNumberify(100))).to.eq(bigNumberify(2))
-    await expect(router.getAmountIn(bigNumberify(0), bigNumberify(100), bigNumberify(100))).to.be.revertedWith(
+    expect(await router.getAmountIn(BigNumber.from(1), BigNumber.from(100), BigNumber.from(100))).to.eq(
+      BigNumber.from(2)
+    )
+    await expect(router.getAmountIn(BigNumber.from(0), BigNumber.from(100), BigNumber.from(100))).to.be.revertedWith(
       'OxDexLibrary: INSUFFICIENT_OUTPUT_AMOUNT'
     )
-    await expect(router.getAmountIn(bigNumberify(1), bigNumberify(0), bigNumberify(100))).to.be.revertedWith(
+    await expect(router.getAmountIn(BigNumber.from(1), BigNumber.from(0), BigNumber.from(100))).to.be.revertedWith(
       'OxDexLibrary: INSUFFICIENT_LIQUIDITY'
     )
-    await expect(router.getAmountIn(bigNumberify(1), bigNumberify(100), bigNumberify(0))).to.be.revertedWith(
+    await expect(router.getAmountIn(BigNumber.from(1), BigNumber.from(100), BigNumber.from(0))).to.be.revertedWith(
       'OxDexLibrary: INSUFFICIENT_LIQUIDITY'
     )
   })
 
   it('getAmountsOut', async () => {
-    await token0.approve(router.address, MaxUint256)
-    await token1.approve(router.address, MaxUint256)
+    await token0.approve(router.address, ethconst.MaxUint256)
+    await token1.approve(router.address, ethconst.MaxUint256)
     await router.addLiquidity(
       token0.address,
       token1.address,
-      bigNumberify(10000),
-      bigNumberify(10000),
+      BigNumber.from(10000),
+      BigNumber.from(10000),
       0,
       0,
       wallet.address,
-      MaxUint256,
+      ethconst.MaxUint256,
       overrides
     )
 
-    await expect(router.getAmountsOut(bigNumberify(2), [token0.address])).to.be.revertedWith(
+    await expect(router.getAmountsOut(BigNumber.from(2), [token0.address])).to.be.revertedWith(
       'OxDexLibrary: INVALID_PATH'
     )
     const path = [token0.address, token1.address]
-    expect(await router.getAmountsOut(bigNumberify(2), path)).to.deep.eq([bigNumberify(2), bigNumberify(1)])
+    expect(await router.getAmountsOut(BigNumber.from(2), path)).to.deep.eq([BigNumber.from(2), BigNumber.from(1)])
   })
 
   it('getAmountsIn', async () => {
-    await token0.approve(router.address, MaxUint256)
-    await token1.approve(router.address, MaxUint256)
+    await token0.approve(router.address, ethconst.MaxUint256)
+    await token1.approve(router.address, ethconst.MaxUint256)
     await router.addLiquidity(
       token0.address,
       token1.address,
-      bigNumberify(10000),
-      bigNumberify(10000),
+      BigNumber.from(10000),
+      BigNumber.from(10000),
       0,
       0,
       wallet.address,
-      MaxUint256,
+      ethconst.MaxUint256,
       overrides
     )
 
-    await expect(router.getAmountsIn(bigNumberify(1), [token0.address])).to.be.revertedWith(
+    await expect(router.getAmountsIn(BigNumber.from(1), [token0.address])).to.be.revertedWith(
       'OxDexLibrary: INVALID_PATH'
     )
     const path = [token0.address, token1.address]
-    expect(await router.getAmountsIn(bigNumberify(1), path)).to.deep.eq([bigNumberify(2), bigNumberify(1)])
+    expect(await router.getAmountsIn(BigNumber.from(1), path)).to.deep.eq([BigNumber.from(2), BigNumber.from(1)])
   })
 })
 
 describe('fee-on-transfer tokens', () => {
   const provider = new MockProvider({
-    hardfork: 'istanbul',
-    mnemonic: 'horn horn horn horn horn horn horn horn horn horn horn horn',
-    gasLimit: 9999999
+    ganacheOptions: {
+      hardfork: 'istanbul',
+      mnemonic: 'horn horn horn horn horn horn horn horn horn horn horn horn',
+      gasLimit: 9999999,
+    },
   })
+
   const [wallet] = provider.getWallets()
-  const loadFixture = createFixtureLoader(provider, [wallet])
+  const loadFixture = createFixtureLoader([wallet], provider)
 
   let DTT: Contract
   let WETH: Contract
   let router: Contract
   let pair: Contract
-  beforeEach(async function() {
-    const fixture = await loadFixture(v2Fixture)
+  beforeEach(async function () {
+    const fixture = await loadFixture(Fixture)
 
     WETH = fixture.WETH
     router = fixture.router
@@ -148,15 +156,15 @@ describe('fee-on-transfer tokens', () => {
     pair = new Contract(pairAddress, JSON.stringify(IOxDexPair.abi), provider).connect(wallet)
   })
 
-  afterEach(async function() {
+  afterEach(async function () {
     expect(await provider.getBalance(router.address)).to.eq(0)
   })
 
   async function addLiquidity(DTTAmount: BigNumber, WETHAmount: BigNumber) {
-    await DTT.approve(router.address, MaxUint256)
-    await router.addLiquidityETH(DTT.address, DTTAmount, DTTAmount, WETHAmount, wallet.address, MaxUint256, {
+    await DTT.approve(router.address, ethconst.MaxUint256)
+    await router.addLiquidityETH(DTT.address, DTTAmount, DTTAmount, WETHAmount, wallet.address, ethconst.MaxUint256, {
       ...overrides,
-      value: WETHAmount
+      value: WETHAmount,
     })
   }
 
@@ -172,22 +180,20 @@ describe('fee-on-transfer tokens', () => {
     const NaiveDTTExpected = DTTInPair.mul(liquidity).div(totalSupply)
     const WETHExpected = WETHInPair.mul(liquidity).div(totalSupply)
 
-    await pair.approve(router.address, MaxUint256)
+    await pair.approve(router.address, ethconst.MaxUint256)
     await router.removeLiquidityETHSupportingFeeOnTransferTokens(
       DTT.address,
       liquidity,
       NaiveDTTExpected,
       WETHExpected,
       wallet.address,
-      MaxUint256,
+      ethconst.MaxUint256,
       overrides
     )
   })
 
   it('removeLiquidityETHWithPermitSupportingFeeOnTransferTokens', async () => {
-    const DTTAmount = expandTo18Decimals(1)
-      .mul(100)
-      .div(99)
+    const DTTAmount = expandTo18Decimals(1).mul(100).div(99)
     const ETHAmount = expandTo18Decimals(4)
     await addLiquidity(DTTAmount, ETHAmount)
 
@@ -198,7 +204,7 @@ describe('fee-on-transfer tokens', () => {
       pair,
       { owner: wallet.address, spender: router.address, value: expectedLiquidity.sub(MINIMUM_LIQUIDITY) },
       nonce,
-      MaxUint256
+      ethconst.MaxUint256
     )
     const { v, r, s } = ecsign(Buffer.from(digest.slice(2), 'hex'), Buffer.from(wallet.privateKey.slice(2), 'hex'))
 
@@ -209,14 +215,14 @@ describe('fee-on-transfer tokens', () => {
     const NaiveDTTExpected = DTTInPair.mul(liquidity).div(totalSupply)
     const WETHExpected = WETHInPair.mul(liquidity).div(totalSupply)
 
-    await pair.approve(router.address, MaxUint256)
+    await pair.approve(router.address, ethconst.MaxUint256)
     await router.removeLiquidityETHWithPermitSupportingFeeOnTransferTokens(
       DTT.address,
       liquidity,
       NaiveDTTExpected,
       WETHExpected,
       wallet.address,
-      MaxUint256,
+      ethconst.MaxUint256,
       false,
       v,
       r,
@@ -226,9 +232,7 @@ describe('fee-on-transfer tokens', () => {
   })
 
   describe('swapExactTokensForTokensSupportingFeeOnTransferTokens', () => {
-    const DTTAmount = expandTo18Decimals(5)
-      .mul(100)
-      .div(99)
+    const DTTAmount = expandTo18Decimals(5).mul(100).div(99)
     const ETHAmount = expandTo18Decimals(10)
     const amountIn = expandTo18Decimals(1)
 
@@ -237,14 +241,14 @@ describe('fee-on-transfer tokens', () => {
     })
 
     it('DTT -> WETH', async () => {
-      await DTT.approve(router.address, MaxUint256)
+      await DTT.approve(router.address, ethconst.MaxUint256)
 
       await router.swapExactTokensForTokensSupportingFeeOnTransferTokens(
         amountIn,
         0,
         [DTT.address, WETH.address],
         wallet.address,
-        MaxUint256,
+        ethconst.MaxUint256,
         overrides
       )
     })
@@ -252,14 +256,14 @@ describe('fee-on-transfer tokens', () => {
     // WETH -> DTT
     it('WETH -> DTT', async () => {
       await WETH.deposit({ value: amountIn }) // mint WETH
-      await WETH.approve(router.address, MaxUint256)
+      await WETH.approve(router.address, ethconst.MaxUint256)
 
       await router.swapExactTokensForTokensSupportingFeeOnTransferTokens(
         amountIn,
         0,
         [WETH.address, DTT.address],
         wallet.address,
-        MaxUint256,
+        ethconst.MaxUint256,
         overrides
       )
     })
@@ -267,9 +271,7 @@ describe('fee-on-transfer tokens', () => {
 
   // ETH -> DTT
   it('swapExactETHForTokensSupportingFeeOnTransferTokens', async () => {
-    const DTTAmount = expandTo18Decimals(10)
-      .mul(100)
-      .div(99)
+    const DTTAmount = expandTo18Decimals(10).mul(100).div(99)
     const ETHAmount = expandTo18Decimals(5)
     const swapAmount = expandTo18Decimals(1)
     await addLiquidity(DTTAmount, ETHAmount)
@@ -278,31 +280,29 @@ describe('fee-on-transfer tokens', () => {
       0,
       [WETH.address, DTT.address],
       wallet.address,
-      MaxUint256,
+      ethconst.MaxUint256,
       {
         ...overrides,
-        value: swapAmount
+        value: swapAmount,
       }
     )
   })
 
   // DTT -> ETH
   it('swapExactTokensForETHSupportingFeeOnTransferTokens', async () => {
-    const DTTAmount = expandTo18Decimals(5)
-      .mul(100)
-      .div(99)
+    const DTTAmount = expandTo18Decimals(5).mul(100).div(99)
     const ETHAmount = expandTo18Decimals(10)
     const swapAmount = expandTo18Decimals(1)
 
     await addLiquidity(DTTAmount, ETHAmount)
-    await DTT.approve(router.address, MaxUint256)
+    await DTT.approve(router.address, ethconst.MaxUint256)
 
     await router.swapExactTokensForETHSupportingFeeOnTransferTokens(
       swapAmount,
       0,
       [DTT.address, WETH.address],
       wallet.address,
-      MaxUint256,
+      ethconst.MaxUint256,
       overrides
     )
   })
@@ -310,18 +310,20 @@ describe('fee-on-transfer tokens', () => {
 
 describe('fee-on-transfer tokens: reloaded', () => {
   const provider = new MockProvider({
-    hardfork: 'istanbul',
-    mnemonic: 'horn horn horn horn horn horn horn horn horn horn horn horn',
-    gasLimit: 9999999
+    ganacheOptions: {
+      hardfork: 'istanbul',
+      mnemonic: 'horn horn horn horn horn horn horn horn horn horn horn horn',
+      gasLimit: 9999999,
+    },
   })
   const [wallet] = provider.getWallets()
-  const loadFixture = createFixtureLoader(provider, [wallet])
+  const loadFixture = createFixtureLoader([wallet], provider)
 
   let DTT: Contract
   let DTT2: Contract
   let router: Contract
-  beforeEach(async function() {
-    const fixture = await loadFixture(v2Fixture)
+  beforeEach(async function () {
+    const fixture = await loadFixture(Fixture)
 
     router = fixture.router
 
@@ -333,13 +335,13 @@ describe('fee-on-transfer tokens: reloaded', () => {
     const pairAddress = await fixture.factory.getPair(DTT.address, DTT2.address)
   })
 
-  afterEach(async function() {
+  afterEach(async function () {
     expect(await provider.getBalance(router.address)).to.eq(0)
   })
 
   async function addLiquidity(DTTAmount: BigNumber, DTT2Amount: BigNumber) {
-    await DTT.approve(router.address, MaxUint256)
-    await DTT2.approve(router.address, MaxUint256)
+    await DTT.approve(router.address, ethconst.MaxUint256)
+    await DTT2.approve(router.address, ethconst.MaxUint256)
     await router.addLiquidity(
       DTT.address,
       DTT2.address,
@@ -348,15 +350,13 @@ describe('fee-on-transfer tokens: reloaded', () => {
       DTTAmount,
       DTT2Amount,
       wallet.address,
-      MaxUint256,
+      ethconst.MaxUint256,
       overrides
     )
   }
 
   describe('swapExactTokensForTokensSupportingFeeOnTransferTokens', () => {
-    const DTTAmount = expandTo18Decimals(5)
-      .mul(100)
-      .div(99)
+    const DTTAmount = expandTo18Decimals(5).mul(100).div(99)
     const DTT2Amount = expandTo18Decimals(5)
     const amountIn = expandTo18Decimals(1)
 
@@ -365,14 +365,14 @@ describe('fee-on-transfer tokens: reloaded', () => {
     })
 
     it('DTT -> DTT2', async () => {
-      await DTT.approve(router.address, MaxUint256)
+      await DTT.approve(router.address, ethconst.MaxUint256)
 
       await router.swapExactTokensForTokensSupportingFeeOnTransferTokens(
         amountIn,
         0,
         [DTT.address, DTT2.address],
         wallet.address,
-        MaxUint256,
+        ethconst.MaxUint256,
         overrides
       )
     })

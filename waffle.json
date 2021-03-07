@@ -1,5 +1,6 @@
 {
   "compilerVersion": "./node_modules/solc",
+  "flattenOutputDirectory": "build/flatten",
   "outputType": "all",
   "compilerOptions": {
     "outputSelection": {
